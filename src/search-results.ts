@@ -1,10 +1,84 @@
 import { renderBlock } from './lib.js';
-import { SearchFormData } from './search-form';
+import { SearchFormData } from './search-form.js';
 
+export interface Place {
+  id: number;
+  name: string;
+  image: string;
+  price: number;
+  description: string;
+  bookedDates: number[];
+  remoteness: number;
+}
+
+function dateToUnixStamp(date) {
+  return date.getTime() / 1000;
+}
+
+function mapToJson(map : Map<number, Pick<Place, 'name'|'image'>>) : string {
+  const keys = [...map.keys()];
+  const mapData = keys.map(key => [key, map.get(key)]);
+  return JSON.stringify({
+    dataType: 'Map',
+    mapData: mapData
+  });
+}
+export function jsonToMap(json?: string) : Map<number, Pick<Place, 'name'|'image'>> {
+  if (!json) return new Map();
+  const data: {dataType: string, mapData: [number, Pick<Place, 'name'|'image'>][]} = JSON.parse(json);
+  if (data.dataType !== 'Map') return; 
+  return new Map(data.mapData);
+}
 
 export function searchResults (searchData: SearchFormData) {
-  console.log(searchData);
+  let url = 'http://localhost:3030/places?' +
+  `checkInDate=${dateToUnixStamp(searchData.checkInDate)}&` +
+  `checkOutDate=${dateToUnixStamp(searchData.checkOutDate)}&` +
+  'coordinates=59.9386,30.3141';
+  if (searchData.maxPrice) {
+    url += `&maxPrice=${searchData.maxPrice}`
+  }
+  fetch(url)
+    .then<Place[]>(response => response.json())
+    .then(data => data ? renderSearchResultsBlock(data) : renderEmptyOrErrorSearchBlock('Ничего не найдено'))
+    .catch((err) => {renderEmptyOrErrorSearchBlock('Что-то пошло не так'); console.log(err)});
 }
+
+function isFavorite (id: number) {
+  const favoriteItemsData = localStorage.getItem('favoriteItems');
+  const favoriteItems: Map<number, Pick<Place, 'name'|'image'>> = jsonToMap(favoriteItemsData);
+  return favoriteItems.has(id);
+}
+
+export function toggleFavoriteItem (event: Event) {
+  const likeBtn = event.target as HTMLElement;
+  if (!likeBtn.classList.contains('favorites')) return;
+  const id = Number(likeBtn.getAttribute('data-id'));
+  const favoriteItemsData = localStorage.getItem('favoriteItems');
+  const favoriteItems: Map<number, Pick<Place, 'name'|'image'>> = jsonToMap(favoriteItemsData);
+  if (favoriteItems.has(id)) {
+    favoriteItems.delete(id);
+    localStorage.setItem('favoriteItems', mapToJson(favoriteItems));
+    likeBtn.classList.remove('active');
+    document.querySelector('.fav').innerHTML = favoriteItems.size ? `<i class="heart-icon active"></i>${favoriteItems.size}` : '<i class="heart-icon"></i>ничего нет';
+  } else {
+    const url = `http://localhost:3030/places/${id}`;
+    fetch(url)
+      .then<Place>(response => response.json())
+      .then(data => {
+        favoriteItems.set(id, { 
+          name: data.name,
+          image: data.image,
+        });
+        localStorage.setItem('favoriteItems', mapToJson(favoriteItems));
+        likeBtn.classList.add('active');
+        document.querySelector('.fav').innerHTML = favoriteItems.size ? `<i class="heart-icon active"></i>${favoriteItems.size}` : '<i class="heart-icon"></i>ничего нет';
+      })
+      .catch(() => renderEmptyOrErrorSearchBlock('Что-то пошло не так'));
+  } 
+}
+
+
 
 export function renderSearchStubBlock () {
   renderBlock(
@@ -18,7 +92,7 @@ export function renderSearchStubBlock () {
   )
 }
 
-export function renderEmptyOrErrorSearchBlock (reasonMessage) {
+export function renderEmptyOrErrorSearchBlock (reasonMessage?: string) {
   renderBlock(
     'search-results-block',
     `
@@ -30,7 +104,7 @@ export function renderEmptyOrErrorSearchBlock (reasonMessage) {
   )
 }
 
-export function renderSearchResultsBlock () {
+export function renderSearchResultsBlock (data: Place[]) {
   renderBlock(
     'search-results-block',
     `
@@ -45,50 +119,29 @@ export function renderSearchResultsBlock () {
             </select>
         </div>
     </div>
-    <ul class="results-list">
-      <li class="result">
-        <div class="result-container">
-          <div class="result-img-container">
-            <div class="favorites active"></div>
-            <img class="result-img" src="./img/result-1.png" alt="">
-          </div>	
-          <div class="result-info">
-            <div class="result-info--header">
-              <p>YARD Residence Apart-hotel</p>
-              <p class="price">13000&#8381;</p>
-            </div>
-            <div class="result-info--map"><i class="map-icon"></i> 2.5км от вас</div>
-            <div class="result-info--descr">Комфортный апарт-отель в самом сердце Санкт-Петербрга. К услугам гостей номера с видом на город и бесплатный Wi-Fi.</div>
-            <div class="result-info--footer">
-              <div>
-                <button>Забронировать</button>
-              </div>
-            </div>
+    <ul class="results-list">` +
+    data.map(place => `<li class="result">
+    <div class="result-container">
+      <div class="result-img-container">
+        <div class="favorites ${isFavorite(place.id) && 'active'}" data-id="${place.id}"></div>
+        <img class="result-img" src="${place.image}" alt="">
+      </div>	
+      <div class="result-info">
+        <div class="result-info--header">
+          <p>${place.name}</p>
+          <p class="price">${place.price}&#8381;</p>
+        </div>
+        <div class="result-info--map"><i class="map-icon"></i>${place.remoteness}км от вас</div>
+        <div class="result-info--descr">${place.description}</div>
+        <div class="result-info--footer">
+          <div>
+            <button>Забронировать</button>
           </div>
         </div>
-      </li>
-      <li class="result">
-        <div class="result-container">
-          <div class="result-img-container">
-            <div class="favorites"></div>
-            <img class="result-img" src="./img/result-2.png" alt="">
-          </div>	
-          <div class="result-info">
-            <div class="result-info--header">
-              <p>Akyan St.Petersburg</p>
-              <p class="price">13000&#8381;</p>
-            </div>
-            <div class="result-info--map"><i class="map-icon"></i> 1.1км от вас</div>
-            <div class="result-info--descr">Отель Akyan St-Petersburg с бесплатным Wi-Fi на всей территории расположен в историческом здании Санкт-Петербурга.</div>
-            <div class="result-info--footer">
-              <div>
-                <button>Забронировать</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </li>
-    </ul>
-    `
+      </div>
+    </div>
+  </li>`)
+    + '</ul>'
+    
   )
 }

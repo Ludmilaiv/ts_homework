@@ -1,4 +1,5 @@
 import { renderBlock } from './lib.js';
+import { Place, jsonToMap } from './search-results.js';
 
 interface User {
   username: string,
@@ -12,7 +13,6 @@ export function setData () {
     avatarUrl: './img/avatar.png'
   };
   localStorage.setItem('user', JSON.stringify(userData));
-  localStorage.setItem('favoritesAmount', '3')
 } 
 
 export function getUserData (): User|null {
@@ -23,12 +23,11 @@ export function getUserData (): User|null {
   return null;
 }
 
-export function getFavoritesAmount (): number|null {
-  const favoritesAmount: unknown = Number(localStorage.getItem('favoritesAmount'));
-  if (typeof(favoritesAmount) === 'number') {
-    return favoritesAmount;
-  }
-  return null;
+export function getFavoritesAmount (): number {
+  const favoriteItemsData = localStorage.getItem('favoriteItems');
+  const favoriteItems: Map<number, Pick<Place, 'name'|'image'>> = jsonToMap(favoriteItemsData);
+  const favoritesAmount = favoriteItems.size;
+  return favoritesAmount;
 }
 
 export function renderUserBlock (userName: string, avatar: string, favoriteItemsAmount?: number) {
