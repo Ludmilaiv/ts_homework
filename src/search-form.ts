@@ -1,4 +1,33 @@
-import { renderBlock } from './lib.js'
+import { renderBlock } from './lib.js';
+import { searchResults } from './search-results.js';
+
+export interface SearchFormData {
+  city: string;
+  checkInDate: Date,
+  checkOutDate: Date,
+  maxPrice?: number
+}
+
+export function search (event: Event) {
+  event.preventDefault();
+  const form = event.target as HTMLFormElement;
+  if (form.id !== 'searchForm') return;
+  const formData = new FormData(form);
+  const city = 'Санкт-Петербург';
+  const checkInDate = formData.get('checkin'); 
+  const checkOutDate = formData.get('checkout'); 
+  if (!checkInDate || !checkOutDate) return;
+  const maxPrice = formData.get('price');
+  const data: SearchFormData = {
+    city: String(city),
+    checkInDate: checkInDate ? new Date(String(checkInDate)) : null,
+    checkOutDate: checkOutDate ? new Date(String(checkOutDate)) : null,
+    maxPrice: Number(maxPrice) || null
+  };
+  searchResults(data);
+}
+
+
 
 export function renderSearchFormBlock (startDate: Date, stopDate: Date) {
   const date = new Date();
@@ -10,12 +39,12 @@ export function renderSearchFormBlock (startDate: Date, stopDate: Date) {
   renderBlock(
     'search-form-block',
     `
-    <form>
+    <form id="searchForm">
       <fieldset class="search-filedset">
         <div class="row">
           <div>
             <label for="city">Город</label>
-            <input id="city" type="text" disabled value="Санкт-Петербург" />
+            <input id="city" name="city" type="text" disabled value="Санкт-Петербург" />
             <input type="hidden" disabled value="59.9386,30.3141" />
           </div>
           <!--<div class="providers">
@@ -37,11 +66,11 @@ export function renderSearchFormBlock (startDate: Date, stopDate: Date) {
             <input id="max-price" type="text" value="" name="price" class="max-price" />
           </div>
           <div>
-            <div><button>Найти</button></div>
+            <div><button type="submit">Найти</button></div>
           </div>
         </div>
       </fieldset>
     </form>
     `
-  )
+  );
 }
