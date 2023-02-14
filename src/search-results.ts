@@ -1,21 +1,16 @@
 import { renderBlock } from './lib.js';
 import { SearchFormData } from './search-form.js';
+import { FlatRentSdk, Flat } from './flat-rent-sdk.js';
 
-export interface Place {
-  id: number;
-  name: string;
-  image: string;
-  price: number;
-  description: string;
-  bookedDates: number[];
-  remoteness: number;
-}
+export type FavoriteItems = Map<string, Pick<Flat, 'title' | 'photos'>>;
+
+const flatRentSdk =  new FlatRentSdk;
 
 function dateToUnixStamp(date) {
   return date.getTime() / 1000;
 }
 
-function mapToJson(map : Map<number, Pick<Place, 'name'|'image'>>) : string {
+function mapToJson(map : FavoriteItems) : string {
   const keys = [...map.keys()];
   const mapData = keys.map(key => [key, map.get(key)]);
   return JSON.stringify({
@@ -23,52 +18,48 @@ function mapToJson(map : Map<number, Pick<Place, 'name'|'image'>>) : string {
     mapData: mapData
   });
 }
-export function jsonToMap(json?: string) : Map<number, Pick<Place, 'name'|'image'>> {
+export function jsonToMap(json?: string) : FavoriteItems {
   if (!json) return new Map();
-  const data: {dataType: string, mapData: [number, Pick<Place, 'name'|'image'>][]} = JSON.parse(json);
+  const data: {dataType: string, mapData: [string, Flat][]} = JSON.parse(json);
   if (data.dataType !== 'Map') return; 
   return new Map(data.mapData);
 }
 
 export function searchResults (searchData: SearchFormData) {
-  let url = 'http://localhost:3030/places?' +
-  `checkInDate=${dateToUnixStamp(searchData.checkInDate)}&` +
-  `checkOutDate=${dateToUnixStamp(searchData.checkOutDate)}&` +
-  'coordinates=59.9386,30.3141';
-  if (searchData.maxPrice) {
-    url += `&maxPrice=${searchData.maxPrice}`
-  }
-  fetch(url)
-    .then<Place[]>(response => response.json())
+
+  flatRentSdk.search({
+    city: 'Санкт-Петербург',
+    checkInDate: searchData.checkInDate,
+    checkOutDate: searchData.checkOutDate,
+    priceLimit: searchData.maxPrice
+  })
     .then(data => data ? renderSearchResultsBlock(data) : renderEmptyOrErrorSearchBlock('Ничего не найдено'))
     .catch((err) => {renderEmptyOrErrorSearchBlock('Что-то пошло не так'); console.log(err)});
 }
 
-function isFavorite (id: number) {
+function isFavorite (id: string) {
   const favoriteItemsData = localStorage.getItem('favoriteItems');
-  const favoriteItems: Map<number, Pick<Place, 'name'|'image'>> = jsonToMap(favoriteItemsData);
+  const favoriteItems: FavoriteItems = jsonToMap(favoriteItemsData);
   return favoriteItems.has(id);
 }
 
 export function toggleFavoriteItem (event: Event) {
   const likeBtn = event.target as HTMLElement;
   if (!likeBtn.classList.contains('favorites')) return;
-  const id = Number(likeBtn.getAttribute('data-id'));
+  const id = likeBtn.getAttribute('data-id');
   const favoriteItemsData = localStorage.getItem('favoriteItems');
-  const favoriteItems: Map<number, Pick<Place, 'name'|'image'>> = jsonToMap(favoriteItemsData);
+  const favoriteItems: FavoriteItems = jsonToMap(favoriteItemsData);
   if (favoriteItems.has(id)) {
     favoriteItems.delete(id);
     localStorage.setItem('favoriteItems', mapToJson(favoriteItems));
     likeBtn.classList.remove('active');
     document.querySelector('.fav').innerHTML = favoriteItems.size ? `<i class="heart-icon active"></i>${favoriteItems.size}` : '<i class="heart-icon"></i>ничего нет';
   } else {
-    const url = `http://localhost:3030/places/${id}`;
-    fetch(url)
-      .then<Place>(response => response.json())
+    flatRentSdk.get(id)
       .then(data => {
         favoriteItems.set(id, { 
-          name: data.name,
-          image: data.image,
+          title: data.title,
+          photos: data.photos,
         });
         localStorage.setItem('favoriteItems', mapToJson(favoriteItems));
         likeBtn.classList.add('active');
@@ -77,8 +68,6 @@ export function toggleFavoriteItem (event: Event) {
       .catch(() => renderEmptyOrErrorSearchBlock('Что-то пошло не так'));
   } 
 }
-
-
 
 export function renderSearchStubBlock () {
   renderBlock(
@@ -104,7 +93,7 @@ export function renderEmptyOrErrorSearchBlock (reasonMessage?: string) {
   )
 }
 
-export function renderSearchResultsBlock (data: Place[]) {
+export function renderSearchResultsBlock (data: Flat[]) {
   renderBlock(
     'search-results-block',
     `
@@ -124,15 +113,15 @@ export function renderSearchResultsBlock (data: Place[]) {
     <div class="result-container">
       <div class="result-img-container">
         <div class="favorites ${isFavorite(place.id) && 'active'}" data-id="${place.id}"></div>
-        <img class="result-img" src="${place.image}" alt="">
+        <img class="result-img" src="${place.photos[0]}" alt="">
       </div>	
       <div class="result-info">
         <div class="result-info--header">
-          <p>${place.name}</p>
-          <p class="price">${place.price}&#8381;</p>
+          <p>${place.title}</p>
+          <p class="price">${place.totalPrice}&#8381;</p>
         </div>
-        <div class="result-info--map"><i class="map-icon"></i>${place.remoteness}км от вас</div>
-        <div class="result-info--descr">${place.description}</div>
+        <div class="result-info--map"><i class="map-icon"></i></div>
+        <div class="result-info--descr">${place.details}</div>
         <div class="result-info--footer">
           <div>
             <button>Забронировать</button>

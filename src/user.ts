@@ -1,5 +1,5 @@
 import { renderBlock } from './lib.js';
-import { Place, jsonToMap } from './search-results.js';
+import { FavoriteItems, jsonToMap } from './search-results.js';
 
 interface User {
   username: string,
@@ -25,7 +25,7 @@ export function getUserData (): User|null {
 
 export function getFavoritesAmount (): number {
   const favoriteItemsData = localStorage.getItem('favoriteItems');
-  const favoriteItems: Map<number, Pick<Place, 'name'|'image'>> = jsonToMap(favoriteItemsData);
+  const favoriteItems: FavoriteItems = jsonToMap(favoriteItemsData);
   const favoritesAmount = favoriteItems.size;
   return favoritesAmount;
 }
