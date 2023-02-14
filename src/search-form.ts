@@ -27,8 +27,6 @@ export function search (event: Event) {
   searchResults(data);
 }
 
-
-
 export function renderSearchFormBlock (startDate: Date, stopDate: Date) {
   const date = new Date();
   const startDateString = startDate.toLocaleDateString('en-CA');
