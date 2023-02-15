@@ -1,8 +1,8 @@
 interface SearchParams {
   city: string;
-  checkInDate: Date;
-  checkOutDate: Date;
-  priceLimit: number;
+  checkInDate: Date | null;
+  checkOutDate: Date | null;
+  priceLimit: number | null;
 }
 
 export interface FlatSdk {
