@@ -3,8 +3,8 @@ import { searchResults } from './search-results.js';
 
 export interface SearchFormData {
   city: string;
-  checkInDate: Date,
-  checkOutDate: Date,
+  checkInDate: Date | null,
+  checkOutDate: Date | null,
   maxPrice?: number
 }
 
@@ -22,12 +22,10 @@ export function search (event: Event) {
     city: String(city),
     checkInDate: checkInDate ? new Date(String(checkInDate)) : null,
     checkOutDate: checkOutDate ? new Date(String(checkOutDate)) : null,
-    maxPrice: Number(maxPrice) || null
+    maxPrice: Number(maxPrice)
   };
   searchResults(data);
 }
-
-
 
 export function renderSearchFormBlock (startDate: Date, stopDate: Date) {
   const date = new Date();

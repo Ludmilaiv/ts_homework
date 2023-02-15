@@ -1,11 +1,11 @@
 interface SearchParams {
   city: string;
-  checkInDate: Date;
-  checkOutDate: Date;
-  priceLimit: number;
+  checkInDate: Date | null;
+  checkOutDate: Date | null;
+  priceLimit: number | null;
 }
 
-export interface Flat {
+export interface FlatSdk {
   id: string;
   bookedDates: Date[];
   coordinates: number[];
@@ -16,7 +16,7 @@ export interface Flat {
 }
 
 export class FlatRentSdk {
-  get(id: string) : Promise<Flat>;
-  search(parameters: SearchParams) : Promise<Flat[]>;
+  get(id: string) : Promise<FlatSdk>;
+  search(parameters: SearchParams) : Promise<FlatSdk[]>;
   book(flatId: string, checkInDate: Date, checkOutDate: Date) : Promise<number>
 }

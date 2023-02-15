@@ -16,21 +16,22 @@ export function setData () {
 } 
 
 export function getUserData (): User|null {
-  const userData: unknown = JSON.parse(localStorage.getItem('user'));
+  const userData: unknown = JSON.parse(localStorage.getItem('user') || '');
   if (userData instanceof Object && 'username' in userData && 'avatarUrl' in userData) {
     return userData as User;
   }
   return null;
 }
 
-export function getFavoritesAmount (): number {
+export function getFavoritesAmount (): number | null {
   const favoriteItemsData = localStorage.getItem('favoriteItems');
-  const favoriteItems: FavoriteItems = jsonToMap(favoriteItemsData);
+  const favoriteItems: FavoriteItems | null = jsonToMap(favoriteItemsData);
+  if (!favoriteItems) return null;
   const favoritesAmount = favoriteItems.size;
   return favoritesAmount;
 }
 
-export function renderUserBlock (userName: string, avatar: string, favoriteItemsAmount?: number) {
+export function renderUserBlock (userName: string, avatar: string, favoriteItemsAmount: number | null) {
   const favoritesCaption = favoriteItemsAmount ? favoriteItemsAmount : 'ничего нет'
   const hasFavoriteItems = favoriteItemsAmount ? true : false
 

@@ -1,16 +1,10 @@
 import { renderBlock } from './lib.js';
 import { SearchFormData } from './search-form.js';
-import { FlatRentSdk, Flat } from './flat-rent-sdk.js';
+import { Place, ApiProvider, SdkProvider } from './providers.js';
 
-export type FavoriteItems = Map<string, Pick<Flat, 'title' | 'photos'>>;
+export type FavoriteItems = Map<string | number, Pick<Place, 'name' | 'image'>>;
 
-const flatRentSdk =  new FlatRentSdk;
-
-function dateToUnixStamp(date) {
-  return date.getTime() / 1000;
-}
-
-function mapToJson(map : FavoriteItems) : string {
+function mapToJson(map: FavoriteItems): string {
   const keys = [...map.keys()];
   const mapData = keys.map(key => [key, map.get(key)]);
   return JSON.stringify({
@@ -18,58 +12,114 @@ function mapToJson(map : FavoriteItems) : string {
     mapData: mapData
   });
 }
-export function jsonToMap(json?: string) : FavoriteItems {
+export function jsonToMap(json: string | null): FavoriteItems | null {
   if (!json) return new Map();
-  const data: {dataType: string, mapData: [string, Flat][]} = JSON.parse(json);
-  if (data.dataType !== 'Map') return; 
+  const data: { dataType: string, mapData: [string, Place][] } = JSON.parse(json);
+  if (data.dataType !== 'Map') return null;
   return new Map(data.mapData);
 }
 
-export function searchResults (searchData: SearchFormData) {
-
-  flatRentSdk.search({
-    city: 'Санкт-Петербург',
-    checkInDate: searchData.checkInDate,
-    checkOutDate: searchData.checkOutDate,
-    priceLimit: searchData.maxPrice
-  })
-    .then(data => data ? renderSearchResultsBlock(data) : renderEmptyOrErrorSearchBlock('Ничего не найдено'))
-    .catch((err) => {renderEmptyOrErrorSearchBlock('Что-то пошло не так'); console.log(err)});
+function sortByPriceAscending(one: Place, two: Place) {
+  if (one.price > two.price) {
+    return 1
+  } else if (one.price < two.price) {
+    return -1
+  } else {
+    return 0
+  }
 }
 
-function isFavorite (id: string) {
+function sortByPriceDescending(one: Place, two: Place) {
+  if (one.price < two.price) {
+    return 1
+  } else if (one.price > two.price) {
+    return -1
+  } else {
+    return 0
+  }
+}
+
+function sortByDistance(one: Place, two: Place) {
+  if (!one.remoteness) {
+    return 0;
+  } else if (!two.remoteness) {
+    return -1;
+  } else if (one.remoteness > two.remoteness) {
+    return 1
+  } else if (one.remoteness < two.remoteness) {
+    return -1
+  } else {
+    return 0
+  }
+}
+
+function sorting(places: Place[], order: 'ch' | 'exp' | 'cl'): Place[] {
+  switch(order) {
+  case 'ch':
+    return places.sort(sortByPriceAscending);
+  case 'exp':
+    return places.sort(sortByPriceDescending);
+  case 'cl':
+    return places.sort(sortByDistance)
+  }
+}
+
+const sdk = new SdkProvider;
+const api = new ApiProvider;
+
+export function searchResults(searchData: SearchFormData, order?: 'ch' | 'exp' | 'cl') {
+  Promise.all([
+    sdk.find(searchData),
+    api.find(searchData)
+  ]).then(results => {
+    const allResults: Place[] = [...results[0], ...results[1]];
+    results ? renderSearchResultsBlock(sorting(allResults, order || 'ch')) : renderEmptyOrErrorSearchBlock('Ничего не найдено');
+  }).catch((err) => { renderEmptyOrErrorSearchBlock('Что-то пошло не так'); console.log(err) });
+}
+
+function isFavorite(id: string) {
   const favoriteItemsData = localStorage.getItem('favoriteItems');
-  const favoriteItems: FavoriteItems = jsonToMap(favoriteItemsData);
-  return favoriteItems.has(id);
+  const favoriteItems: FavoriteItems | null = jsonToMap(favoriteItemsData);
+  if (!favoriteItems) return false;
+  return favoriteItems && favoriteItems.has(id);
 }
 
-export function toggleFavoriteItem (event: Event) {
+export function toggleFavoriteItem(event: Event) {
   const likeBtn = event.target as HTMLElement;
   if (!likeBtn.classList.contains('favorites')) return;
   const id = likeBtn.getAttribute('data-id');
+  if (!id) return;
   const favoriteItemsData = localStorage.getItem('favoriteItems');
-  const favoriteItems: FavoriteItems = jsonToMap(favoriteItemsData);
+  const favoriteItems: FavoriteItems | null = jsonToMap(favoriteItemsData);
+  if (!favoriteItems) return;
   if (favoriteItems.has(id)) {
     favoriteItems.delete(id);
     localStorage.setItem('favoriteItems', mapToJson(favoriteItems));
     likeBtn.classList.remove('active');
-    document.querySelector('.fav').innerHTML = favoriteItems.size ? `<i class="heart-icon active"></i>${favoriteItems.size}` : '<i class="heart-icon"></i>ничего нет';
+    const fav = document.querySelector('.fav');
+    if (!fav) return;
+    fav.innerHTML = favoriteItems.size ? `<i class="heart-icon active"></i>${favoriteItems.size}` : '<i class="heart-icon"></i>ничего нет';
   } else {
-    flatRentSdk.get(id)
-      .then(data => {
-        favoriteItems.set(id, { 
-          title: data.title,
-          photos: data.photos,
-        });
-        localStorage.setItem('favoriteItems', mapToJson(favoriteItems));
-        likeBtn.classList.add('active');
-        document.querySelector('.fav').innerHTML = favoriteItems.size ? `<i class="heart-icon active"></i>${favoriteItems.size}` : '<i class="heart-icon"></i>ничего нет';
-      })
-      .catch(() => renderEmptyOrErrorSearchBlock('Что-то пошло не так'));
-  } 
+    Promise.all([
+      sdk.getById(id),
+      api.getById(id)
+    ]).then(results => {
+      const result: Place | null = results[0] || results[1];
+      if (!result) return;
+      favoriteItems.set(id, {
+        name: result.name,
+        image: result.image,
+      });
+      localStorage.setItem('favoriteItems', mapToJson(favoriteItems));
+      likeBtn.classList.add('active');
+      const fav = document.querySelector('.fav');
+      if (!fav) return;
+      fav.innerHTML = favoriteItems.size ? `<i class="heart-icon active"></i>${favoriteItems.size}` : '<i class="heart-icon"></i>ничего нет';
+    }).catch(() => renderEmptyOrErrorSearchBlock('Что-то пошло не так'));
+  }
 }
 
-export function renderSearchStubBlock () {
+export function renderSearchStubBlock() {
   renderBlock(
     'search-results-block',
     `
@@ -81,7 +131,7 @@ export function renderSearchStubBlock () {
   )
 }
 
-export function renderEmptyOrErrorSearchBlock (reasonMessage?: string) {
+export function renderEmptyOrErrorSearchBlock(reasonMessage?: string) {
   renderBlock(
     'search-results-block',
     `
@@ -93,7 +143,29 @@ export function renderEmptyOrErrorSearchBlock (reasonMessage?: string) {
   )
 }
 
-export function renderSearchResultsBlock (data: Flat[]) {
+document.addEventListener('change', (e: Event) => {
+  const target = e.target as HTMLSelectElement;
+  if (target.classList.contains('filter')) {
+    const form = document.getElementById('searchForm') as HTMLFormElement;
+    const formData = new FormData(form);
+    const city = 'Санкт-Петербург';
+    const checkInDate = formData.get('checkin'); 
+    const checkOutDate = formData.get('checkout'); 
+    if (!checkInDate || !checkOutDate) return;
+    const maxPrice = formData.get('price');
+    const data: SearchFormData = {
+      city: String(city),
+      checkInDate: checkInDate ? new Date(String(checkInDate)) : null,
+      checkOutDate: checkOutDate ? new Date(String(checkOutDate)) : null,
+      maxPrice: Number(maxPrice)
+    };
+    const order = target.value as 'ch' | 'exp' | 'cl';
+    searchResults(data, order);
+  }
+})
+
+
+export function renderSearchResultsBlock(data: Place[]) {
   renderBlock(
     'search-results-block',
     `
@@ -101,10 +173,10 @@ export function renderSearchResultsBlock (data: Flat[]) {
         <p>Результаты поиска</p>
         <div class="search-results-filter">
             <span><i class="icon icon-filter"></i> Сортировать:</span>
-            <select>
-                <option selected="">Сначала дешёвые</option>
-                <option selected="">Сначала дорогие</option>
-                <option>Сначала ближе</option>
+            <select class="filter">
+                <option value="ch" selected>Сначала дешёвые</option>
+                <option value="exp">Сначала дорогие</option>
+                <option value="cl">Сначала ближе</option>
             </select>
         </div>
     </div>
@@ -113,15 +185,15 @@ export function renderSearchResultsBlock (data: Flat[]) {
     <div class="result-container">
       <div class="result-img-container">
         <div class="favorites ${isFavorite(place.id) && 'active'}" data-id="${place.id}"></div>
-        <img class="result-img" src="${place.photos[0]}" alt="">
+        <img class="result-img" src="${place.image}" alt="">
       </div>	
       <div class="result-info">
         <div class="result-info--header">
-          <p>${place.title}</p>
-          <p class="price">${place.totalPrice}&#8381;</p>
+          <p>${place.name}</p>
+          <p class="price">${place.price}&#8381;</p>
         </div>
-        <div class="result-info--map"><i class="map-icon"></i></div>
-        <div class="result-info--descr">${place.details}</div>
+        <div class="result-info--map"><i class="map-icon"></i>${place.remoteness ? place.remoteness + 'км от вас' : 'нет информации'}</div>
+        <div class="result-info--descr">${place.description}</div>
         <div class="result-info--footer">
           <div>
             <button>Забронировать</button>
@@ -131,6 +203,6 @@ export function renderSearchResultsBlock (data: Flat[]) {
     </div>
   </li>`)
     + '</ul>'
-    
+
   )
 }
